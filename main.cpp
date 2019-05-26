@@ -36,7 +36,7 @@ int main()
    uint32_t testNumber = 0;
    while (readNumber(stream, testNumber))//пока есть значение
    {
-      std::cout<< testNumber << std::endl;
+      std::cout << testNumber << std::endl;
    // read and analyze numbers
    }
 
