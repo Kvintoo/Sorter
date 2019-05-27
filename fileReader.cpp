@@ -1,20 +1,20 @@
 #include <iostream>
 #include <sys/stat.h>
 #include "fileReader.h"
+#include "utils.h"
 
-const int NUMBER_SIZE = 4;
 CFileReader::CFileReader()
 {
 
 }
 
-CFileReader::CFileReader(int argc_, char** argv_) :
+CFileReader::CFileReader(std::string fileName) :
 m_prevPercent(0),
 m_fileSize(0)
 {
-  if (OpenFile(argc_, argv_))
+  if (OpenFile(fileName))
   {
-    GetFileSize(argv_[1]);
+    GetFileSize(fileName);
   }
 }
 
@@ -23,18 +23,9 @@ CFileReader::~CFileReader()
   m_is.close();
 }
 
-bool CFileReader::OpenFile(int argc_, char** argv_)
+bool CFileReader::OpenFile(std::string fileName)
 {
-  if ((argc_ < 1) || (!argv_))
-    return false;
-
-  if ((argc_ < 2))
-  {
-    std::cout << "Enter file name to analyze.";
-    return false;
-  }
-  
-  m_is.open(argv_[1], std::ios::binary | std::ios::in);
+  m_is.open(fileName.c_str(), std::ios::binary | std::ios::in);
 
   if (!m_is.is_open())
   {
@@ -45,16 +36,16 @@ bool CFileReader::OpenFile(int argc_, char** argv_)
   return true;
 }
 
-void CFileReader::GetFileSize(char* argv_)
+void CFileReader::GetFileSize(std::string fileName)
 {
   struct stat fi;
-  stat(argv_, &fi);
+  stat(fileName.c_str(), &fi);
   m_fileSize = static_cast<long>(fi.st_size);
 }
 
 bool CFileReader::IsInitialized()
 {
-  return m_fileSize > 0 ? true : false;//если длина файла не 0, то с файлом можно работать
+  return m_fileSize > 2*NUMBER_SIZE ? true : false;//если длина файла больше двух цифр, то с файлом можно работать
 }
 
 void CFileReader::ShowProgress()
@@ -67,7 +58,12 @@ void CFileReader::ShowProgress()
   }
 }
 
-bool CFileReader::ReadNumber(uint64_t& number_)
+int CFileReader::GetRemainder()
+{
+  return static_cast<int>(m_fileSize - m_is.tellg());
+}
+
+bool CFileReader::ReadNumber(uint32& number_)
 {
   m_is.read((char*)&number_, NUMBER_SIZE);
 
@@ -75,4 +71,9 @@ bool CFileReader::ReadNumber(uint64_t& number_)
     return false;
 
   return true;
+}
+
+const size_t CFileReader::FileSize() const
+{
+  return static_cast<size_t>(m_fileSize);
 }
