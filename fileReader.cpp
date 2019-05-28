@@ -3,19 +3,24 @@
 #include "fileReader.h"
 #include "utils.h"
 
-CFileReader::CFileReader()
+CFileReader::CFileReader() :
+m_prevPercent(0),
+m_fileSize(0),
+m_number(0)
 {
 
 }
 
 CFileReader::CFileReader(std::string fileName) :
 m_prevPercent(0),
-m_fileSize(0)
+m_fileSize(0),
+m_number(0)
 {
-  if (OpenFile(fileName))
-  {
-    GetFileSize(fileName);
-  }
+  SetFile(fileName);
+//   if (OpenFile(fileName))
+//   {
+//     SetFileSize(fileName);
+//   }
 }
 
 CFileReader::~CFileReader()
@@ -36,7 +41,7 @@ bool CFileReader::OpenFile(std::string fileName)
   return true;
 }
 
-void CFileReader::GetFileSize(std::string fileName)
+void CFileReader::SetFileSize(std::string fileName)
 {
   struct stat fi;
   stat(fileName.c_str(), &fi);
@@ -63,6 +68,21 @@ int CFileReader::GetRemainder()
   return static_cast<int>(m_fileSize - m_is.tellg());
 }
 
+uint32 CFileReader::GetNumber() const
+{
+  return m_number;
+}
+
+bool CFileReader::SetFile(std::string fileName)
+{
+  if (OpenFile(fileName))
+  {
+    SetFileSize(fileName);
+  }
+
+  return true;
+}
+
 bool CFileReader::ReadNumber(uint32& number_)
 {
   m_is.read((char*)&number_, NUMBER_SIZE);
@@ -70,6 +90,7 @@ bool CFileReader::ReadNumber(uint32& number_)
   if (m_is.gcount() != NUMBER_SIZE)
     return false;
 
+  m_number = number_;
   return true;
 }
 

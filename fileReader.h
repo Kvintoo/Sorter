@@ -20,16 +20,21 @@ public:
   void ShowProgress();//!< Отображает прогресс чтения файла
   int  GetRemainder();//!< Возвращает размер от текущей позиции до конца файла
 
+  bool SetFile(std::string fileName);
+  uint32 GetNumber() const;
+
   const size_t FileSize() const;//!< Возвращает размер файла
 
 private:
 
   bool OpenFile(std::string fileName);//!< Открывает файл, переданный как аргумент командной строки
-  void GetFileSize(std::string fileName);//!< Возвращает размер файла в байтах 
+  void SetFileSize(std::string fileName);//!< Возвращает размер файла в байтах 
 
 
   int m_prevPercent;//!< Предыдущее значение прогресса чтения файла в %
   int m_fileSize;//!< Размер файла в байтах
+
+  uint32 m_number;//!< Последнее считанное значение из файла
 
   std::ifstream m_is;
 
