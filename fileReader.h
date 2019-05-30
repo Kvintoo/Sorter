@@ -18,12 +18,12 @@ public:
 
   bool ReadNumber(uint32& number_);//!< Читает следующее значение из файла
   void ShowProgress();//!< Отображает прогресс чтения файла
-  int  GetRemainder();//!< Возвращает размер от текущей позиции до конца файла
+  unsigned long GetRemainder();//!< Возвращает размер от текущей позиции до конца файла
 
   bool SetFile(std::string fileName);
   uint32 GetNumber() const;
 
-  const size_t FileSize() const;//!< Возвращает размер файла
+  const int FileSize() const;//!< Возвращает размер файла
 
 private:
 
@@ -32,7 +32,7 @@ private:
 
 
   int m_prevPercent;//!< Предыдущее значение прогресса чтения файла в %
-  int m_fileSize;//!< Размер файла в байтах
+  unsigned long m_fileSize;//!< Размер файла в байтах
 
   uint32 m_number;//!< Последнее считанное значение из файла
 

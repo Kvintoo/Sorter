@@ -17,10 +17,6 @@ m_fileSize(0),
 m_number(0)
 {
   SetFile(fileName);
-//   if (OpenFile(fileName))
-//   {
-//     SetFileSize(fileName);
-//   }
 }
 
 CFileReader::~CFileReader()
@@ -50,6 +46,9 @@ void CFileReader::SetFileSize(std::string fileName)
 
 bool CFileReader::IsInitialized()
 {
+  if (m_fileSize % NUMBER_SIZE)
+    return false;
+
   return m_fileSize > 2*NUMBER_SIZE ? true : false;//если длина файла больше двух цифр, то с файлом можно работать
 }
 
@@ -63,9 +62,9 @@ void CFileReader::ShowProgress()
   }
 }
 
-int CFileReader::GetRemainder()
+unsigned long CFileReader::GetRemainder()
 {
-  return static_cast<int>(m_fileSize - m_is.tellg());
+  return static_cast<unsigned long>(m_fileSize - m_is.tellg());
 }
 
 uint32 CFileReader::GetNumber() const
@@ -78,23 +77,24 @@ bool CFileReader::SetFile(std::string fileName)
   if (OpenFile(fileName))
   {
     SetFileSize(fileName);
+    return true;
   }
 
-  return true;
+  return false;
 }
 
 bool CFileReader::ReadNumber(uint32& number_)
 {
   m_is.read((char*)&number_, NUMBER_SIZE);
 
-  if (m_is.gcount() != NUMBER_SIZE)
+  if (m_is.eof())
     return false;
 
   m_number = number_;
   return true;
 }
 
-const size_t CFileReader::FileSize() const
+const int CFileReader::FileSize() const
 {
   return static_cast<size_t>(m_fileSize);
 }
