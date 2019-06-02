@@ -106,7 +106,7 @@ void MergeParts(int fileCounter)
 
   vector<uint32> outData(ARRAY_SIZE);
   size_t outPos = 0;
-  while (!fileDatas.empty())
+  while (fileDatas.size() > 1)
   {
     auto itMin = min_element(fileDatas.begin(), fileDatas.end(),
                              [](const auto& l_, const auto& r_)
@@ -128,8 +128,16 @@ void MergeParts(int fileCounter)
       remove(fileName.c_str());
     }
   }
-  output.write(reinterpret_cast<char*>(outData.data()), outPos*sizeof(uint32));
 
+  output.write(reinterpret_cast<char*>(outData.data()), outPos*sizeof(uint32));
+  auto& lastFile = fileDatas.front();
+  output.write(reinterpret_cast<char*>(&lastFile.number), sizeof(uint32));
+
+  output << lastFile.fileReader.m_is.rdbuf();
+
+  const string fileName (lastFile.fileName);
+  fileDatas.clear();
+  remove(fileName.c_str());
 
   //NOTE можно считывать сразу несколько чисел в массивы и их анализировать, если это будет проще
   //сравниваем все числа из всех потоков. Наименьшее записываем в выходной массив.

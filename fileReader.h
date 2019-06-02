@@ -22,6 +22,8 @@ public:
 
   const int FileSize() const;//!< Возвращает размер файла
 
+  std::ifstream m_is;
+
 private:
 
   bool OpenFile(std::string fileName);//!< Открывает файл, переданный как аргумент командной строки
@@ -29,7 +31,7 @@ private:
 
   unsigned long m_fileSize = 0L;//!< Размер файла в байтах
 
-  std::ifstream m_is;
+
 
 };
 
