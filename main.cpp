@@ -1,14 +1,8 @@
 #include <iostream>
 #include <fstream>
 #include <string>
-#include <sys/stat.h>
-#include "utils.h"
-#include "fileReader.h"
 #include <algorithm>
-#include <array>
 #include <vector>
-#include <memory>
-#include <chrono>
 #include <list>
 
 // Файл для функций и классов работы со временем.
@@ -16,7 +10,8 @@
 
 using namespace std;
 
-
+using uint32 = uint32_t; //!< Беззнаковое целое число длиной 4 байта
+const size_t ARRAY_SIZE = 26214400; //!< Размер массива в 100 Мб 4 байтных чисел
 
 
 void SaveSorted(vector<uint32> &arrayForSort, int fileCounter,
