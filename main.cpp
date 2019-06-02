@@ -19,9 +19,12 @@ using namespace std;
 
 
 
-void SaveSorted(vector<uint32> &arrayForSort, int fileCounter)
+void SaveSorted(vector<uint32> &arrayForSort, int fileCounter,
+                size_t numElements)
 {
-  sort(arrayForSort.begin(), arrayForSort.end());
+  vector<uint32>::iterator itEnd = arrayForSort.begin() + numElements;
+
+  sort(arrayForSort.begin(), itEnd);
   string fileName = "output" + to_string(fileCounter);
   fstream ostream(fileName, ios::binary | ios::out);
   if (!ostream.is_open())
@@ -29,52 +32,35 @@ void SaveSorted(vector<uint32> &arrayForSort, int fileCounter)
     cout << "failed to open " << fileName << '\n';
   }
 
-  ostream.write(reinterpret_cast<char*>(arrayForSort.data()), arrayForSort.size()*sizeof(uint32));
+  ostream.write(reinterpret_cast<char*>(arrayForSort.data()), numElements*sizeof(uint32));
 }
 
 
 bool SortParts(int& fileCounter)//сортировка частей файла
 {
-  CFileReader fileReader("input");
-  if (!fileReader.IsInitialized())
+  ifstream input("input", ios::binary);
+  if (!input.is_open())
   {
 #ifdef WIN32
     system("PAUSE");
 #endif
-    return false;
+    return false;//FIXME выбросить исключение
   }
 
-  uint32 testNumber = 0;
-  //FIXME Определять размер массива в зависимости от размера файла?
-  const int fileSizeArray = fileReader.FileSize() / NUMBER_SIZE;
-  const int arraySize = fileSizeArray > ARRAY_SIZE ? ARRAY_SIZE : fileSizeArray;
-  vector<uint32> arrayForSort(arraySize);//инициализируем массив 0
-  int counter = 0;
-
-  while (fileReader.ReadNumber(testNumber))//пока есть значение
+  vector<uint32> buffer(ARRAY_SIZE);
+  fileCounter = 0;
+  for(;;)
   {
-    arrayForSort[counter] = testNumber;
-    testNumber = 0;
-    ++counter;
-
-    if (counter >= arraySize)
+    input.read(reinterpret_cast<char*>(buffer.data()), buffer.size()*sizeof(uint32));
+    if(!input.eof())
+      SaveSorted(buffer, ++fileCounter, buffer.size());
+    else
     {
-      SaveSorted(arrayForSort, fileCounter);
-
-      counter = 0;
-      ++fileCounter;
-
-      unsigned long remainder = fileReader.GetRemainder() / NUMBER_SIZE;
-      if (remainder < static_cast<unsigned long>(arraySize))
-      {
-        arrayForSort.resize(remainder);
-      }
+      size_t numElements = input.gcount() / sizeof(uint32);
+      SaveSorted(buffer, ++fileCounter, numElements);
+      break;
     }
   }
-
-  if (!arrayForSort.empty())
-    SaveSorted(arrayForSort, fileCounter);
-
   return true;
 }
 
@@ -167,7 +153,7 @@ int main()
   auto t2 = chrono::high_resolution_clock::now();
 
   //небольшой файл, весь поместился в ОП
-  if (fileCounter == 2)
+  if (fileCounter == 1)
   {
     rename("output1", "output");
     chrono::duration<double> elapsed1 = t2 - t1;
