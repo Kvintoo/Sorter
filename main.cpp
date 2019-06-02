@@ -47,7 +47,8 @@ bool SortParts(int& fileCounter)//сортировка частей файла
 
   uint32 testNumber = 0;
   //FIXME Определять размер массива в зависимости от размера файла?
-  const int arraySize = fileReader.FileSize()/4 > ARRAY_SIZE ? ARRAY_SIZE : fileReader.FileSize()/4;
+  const int fileSizeArray = fileReader.FileSize() / NUMBER_SIZE;
+  const int arraySize = fileSizeArray > ARRAY_SIZE ? ARRAY_SIZE : fileSizeArray;
   vector<uint32> arrayForSort(arraySize);//инициализируем массив 0
   int counter = 0;
 
@@ -64,28 +65,37 @@ bool SortParts(int& fileCounter)//сортировка частей файла
       counter = 0;
       ++fileCounter;
 
-      unsigned long remainder = fileReader.GetRemainder();
-      if (fileReader.GetRemainder() < static_cast<unsigned long>(NUMBER_SIZE*arraySize))
+      unsigned long remainder = fileReader.GetRemainder() / NUMBER_SIZE;
+      if (remainder < static_cast<unsigned long>(arraySize))
       {
-        arrayForSort.resize(remainder/4);
+        arrayForSort.resize(remainder);
       }
     }
   }
 
   if (!arrayForSort.empty())
-  {
-    ++fileCounter;
     SaveSorted(arrayForSort, fileCounter);
-  }
 
   return true;
+}
+
+void WriteData(vector<uint32> &outData, uint32 testNumber, fstream &ostream)
+{
+  if (outData.size() < ARRAY_SIZE)
+    outData.push_back(testNumber);
+  else
+  {
+    //ostream.write(reinterpret_cast<char*>(&arrayForSort[0]), arrayForSort.size()*sizeof(arrayForSort[0]));
+    ostream.write(reinterpret_cast<char*>(outData.data()), outData.size()*sizeof(outData.data()));
+    outData.clear();
+  }
 }
 
 
 void MergeParts(int fileCounter)
 {
   vector<CFileReader> fileReaders(fileCounter);
-  int fileNumber = 0;
+  int fileNumber = 1;
   for (auto& reader : fileReaders)
   {
     string fileName = "output" + to_string(fileNumber);
@@ -103,6 +113,7 @@ void MergeParts(int fileCounter)
   numbers.reserve(fileCounter);
   int readFiles = 0;
   uint32 ethalon = 0;
+  vector<uint32> outData(ARRAY_SIZE);
 
   while (readFiles < fileCounter)
   {
@@ -120,16 +131,15 @@ void MergeParts(int fileCounter)
           }
           else
           {
-            ostream.write(reinterpret_cast<char*>(&testNumber), sizeof(testNumber));
+            WriteData(outData, testNumber, ostream);
           }
         }
         
         else//закончился файл для чтения
         {
           if (numbers.size() > 0)
-          {
             numbers.reserve(numbers.size());
-          }
+
           ++readFiles;
           break;
         }
@@ -139,8 +149,22 @@ void MergeParts(int fileCounter)
     if (numbers.size() > 0)
     {
       sort(numbers.begin(), numbers.end());
-
       ethalon = numbers.front();
+
+//       //лямбда не заработала, т.к. в цикле стоит break
+//       numbers.erase(
+//         remove_if(numbers.begin(), numbers.end(),
+//                   [&](uint32& num)
+//                   {
+//                     if (num == ethalon)
+//                     {
+//                       WriteData(outData, num, ostream);
+//                       //ostream.write(reinterpret_cast<char*>(&num), sizeof(num));
+//                       return true;
+//                     }
+//                     return false;
+//                   }),
+//                   numbers.end());
       for (auto it = numbers.begin(); it != numbers.end();)//FIXME сделать лямбду
       {
         if ((*it) == ethalon)
@@ -167,14 +191,12 @@ void MergeParts(int fileCounter)
 
 
 
-
-
 int main()
 {
   // Получаем текущее время, используя высокоточный таймер.
   auto t1 = chrono::high_resolution_clock::now();
 
-  int fileCounter = 0;
+  int fileCounter = 1;
   if (!SortParts(fileCounter))
     return 0;
 
@@ -182,11 +204,11 @@ int main()
   auto t2 = chrono::high_resolution_clock::now();
 
   //небольшой файл, весь поместился в ОП
-  if (fileCounter == 1)//как переименовать файл программно?
+  if (fileCounter == 2)//как переименовать файл программно?
   {
     chrono::duration<double> elapsed1 = t2 - t1;
     // Отображаем результаты.
-    cout << "Make temp files: " << elapsed1.count() << endl;
+    cout << "Sort temp files: " << elapsed1.count() << endl;
 #ifdef WIN32
     system("PAUSE");
 #endif
@@ -206,8 +228,8 @@ int main()
   chrono::duration<double> elapsed3 = t3 - t1;
 
   // Отображаем результаты.
-  cout << "Make temp files: " << elapsed1.count() << endl;
-  cout << "Sort temp files: " << elapsed2.count() << endl;
+  cout << "Sort temp files: " << elapsed1.count() << endl;
+  cout << "Merge temp files: " << elapsed2.count() << endl;
   cout << "Total time: "      << elapsed3.count() << endl;
 
   //FIXME сделать, чтобы по завершении работы программы сгенерированные файлы удалялись (оставался только output)
@@ -215,6 +237,8 @@ int main()
   system("PAUSE");
 #endif
 }
+
+
 
 
 
