@@ -80,7 +80,7 @@ bool SortParts(int& fileCounter)//сортировка частей файла
 
 struct MergedFileData
 {
-  CFileReader fileReader;
+  ifstream inputFile;
   uint32 number = 0;
   string fileName;
 };
@@ -100,8 +100,11 @@ void MergeParts(int fileCounter)
   {
     fileData.fileName = "output" + to_string(fileNumber);
     ++fileNumber;
-    fileData.fileReader.SetFile(fileData.fileName);
-    fileData.fileReader.ReadNumber(fileData.number);
+    fileData.inputFile.open(fileData.fileName, ios::binary);
+    if(!fileData.inputFile.is_open())
+      return;//FIXME переделать на исключение
+
+    fileData.inputFile.read(reinterpret_cast<char*>(&fileData.number), sizeof(uint32));
   }
 
   vector<uint32> outData(ARRAY_SIZE);
@@ -121,7 +124,8 @@ void MergeParts(int fileCounter)
     outData[outPos] = itMin->number;
     ++outPos;
 
-    if(!itMin->fileReader.ReadNumber(itMin->number))
+    itMin->inputFile.read(reinterpret_cast<char*>(&itMin->number), sizeof(uint32));
+    if(itMin->inputFile.eof())
     {
       const string fileName (itMin->fileName);
       fileDatas.erase(itMin);
@@ -133,7 +137,7 @@ void MergeParts(int fileCounter)
   auto& lastFile = fileDatas.front();
   output.write(reinterpret_cast<char*>(&lastFile.number), sizeof(uint32));
 
-  output << lastFile.fileReader.m_is.rdbuf();
+  output << lastFile.inputFile.rdbuf();
 
   const string fileName (lastFile.fileName);
   fileDatas.clear();
