@@ -78,17 +78,6 @@ bool SortParts(int& fileCounter)//сортировка частей файла
   return true;
 }
 
-void WriteData(vector<uint32> &outData, uint32 testNumber, fstream &ostream)
-{
-  if (outData.size() >= ARRAY_SIZE)
-  {
-     ostream.write(reinterpret_cast<char*>(outData.data()), outData.size()*sizeof(uint32));
-     outData.clear();
-  }
-
-  outData.push_back(testNumber);
-}
-
 struct MergedFileData
 {
   CFileReader fileReader;
@@ -115,13 +104,23 @@ void MergeParts(int fileCounter)
     fileData.fileReader.ReadNumber(fileData.number);
   }
 
-  vector<uint32> outData;
+  vector<uint32> outData(ARRAY_SIZE);
+  size_t outPos = 0;
   while (!fileDatas.empty())
   {
     auto itMin = min_element(fileDatas.begin(), fileDatas.end(),
                              [](const auto& l_, const auto& r_)
                              { return l_.number < r_.number; });
-    WriteData(outData, itMin->number, output);
+
+    if (outPos >= ARRAY_SIZE)
+    {
+       output.write(reinterpret_cast<char*>(outData.data()), outData.size()*sizeof(uint32));
+       outPos = 0;
+    }
+
+    outData[outPos] = itMin->number;
+    ++outPos;
+
     if(!itMin->fileReader.ReadNumber(itMin->number))
     {
       const string fileName (itMin->fileName);
@@ -129,7 +128,7 @@ void MergeParts(int fileCounter)
       remove(fileName.c_str());
     }
   }
-  output.write(reinterpret_cast<char*>(outData.data()), outData.size()*sizeof(uint32));
+  output.write(reinterpret_cast<char*>(outData.data()), outPos*sizeof(uint32));
 
 
   //NOTE можно считывать сразу несколько чисел в массивы и их анализировать, если это будет проще
