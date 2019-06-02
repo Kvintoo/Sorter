@@ -19,11 +19,6 @@ m_number(0)
   SetFile(fileName);
 }
 
-CFileReader::~CFileReader()
-{
-  m_is.close();
-}
-
 bool CFileReader::OpenFile(std::string fileName)
 {
   m_is.open(fileName.c_str(), std::ios::binary | std::ios::in);

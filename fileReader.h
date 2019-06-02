@@ -12,7 +12,6 @@ public:
   CFileReader();
   CFileReader(std::string fileName);
 
-  ~CFileReader();
 
   bool IsInitialized();//!< Проверяет, можно ли работать с классом CFileReader
 
