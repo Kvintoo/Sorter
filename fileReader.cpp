@@ -3,18 +3,8 @@
 #include "fileReader.h"
 #include "utils.h"
 
-CFileReader::CFileReader() :
-m_prevPercent(0),
-m_fileSize(0),
-m_number(0)
-{
 
-}
-
-CFileReader::CFileReader(std::string fileName) :
-m_prevPercent(0),
-m_fileSize(0),
-m_number(0)
+CFileReader::CFileReader(std::string fileName)
 {
   SetFile(fileName);
 }
@@ -39,7 +29,7 @@ void CFileReader::SetFileSize(std::string fileName)
   m_fileSize = static_cast<long>(fi.st_size);
 }
 
-bool CFileReader::IsInitialized()
+bool CFileReader::IsInitialized() const
 {
   if (m_fileSize % NUMBER_SIZE)
     return false;
@@ -47,24 +37,9 @@ bool CFileReader::IsInitialized()
   return m_fileSize > 2*NUMBER_SIZE ? true : false;//если длина файла больше двух цифр, то с файлом можно работать
 }
 
-void CFileReader::ShowProgress()
-{
-  int currentPercent = static_cast<int>(m_is.tellg() * 100 / m_fileSize);
-  if (currentPercent - m_prevPercent > 5)//сообщаем о прогрессе чтения, если считали больше цифр, 
-  {                                      //чем 5% от предыдущего выведенного значения прогресса
-    std::cout << currentPercent << "% read\n";
-    m_prevPercent = currentPercent;
-  }
-}
-
 unsigned long CFileReader::GetRemainder()
 {
   return static_cast<unsigned long>(m_fileSize - m_is.tellg());
-}
-
-uint32 CFileReader::GetNumber() const
-{
-  return m_number;
 }
 
 bool CFileReader::SetFile(std::string fileName)
@@ -82,11 +57,7 @@ bool CFileReader::ReadNumber(uint32& number_)
 {
   m_is.read((char*)&number_, NUMBER_SIZE);
 
-  if (m_is.eof())
-    return false;
-
-  m_number = number_;
-  return true;
+  return !m_is.eof();
 }
 
 const int CFileReader::FileSize() const
