@@ -34,23 +34,29 @@ void SaveSorted(vector<uint32> &arrayForSort, int fileCounter,
 
 mutex fileCounterMutex;
 
-void SortPartFile(std::ifstream &input, std::vector<uint32> &buffer, int & fileCounter, int &retflag)
+void SortPartFile(std::ifstream &input, int & fileCounter)
 {
-  //в функции поток читает файл в буфер, увеличивает счётчик (после этого может начать работать другой поток), сортирует файл
-//если конец файла, то сортируем то, что есть
-  fileCounterMutex.lock();
-  input.read(reinterpret_cast<char*>(buffer.data()), buffer.size() * sizeof(uint32));
-  if (!input.eof())
+  vector<uint32> buffer(ARRAY_SIZE);
+  int counter = 0;
+  size_t numElements = 0;
+  for(;;)
   {
-    SaveSorted(buffer, ++fileCounter, buffer.size());
-    fileCounterMutex.unlock();
-  }
-  else
-  {
-    size_t numElements = static_cast<size_t>(input.gcount() / sizeof(uint32));
-    SaveSorted(buffer, ++fileCounter, numElements);
-    fileCounterMutex.unlock();
-    { retflag = 2; return; };
+    {
+    lock_guard<mutex> lk(fileCounterMutex);
+    input.read(reinterpret_cast<char*>(buffer.data()), buffer.size() * sizeof(uint32));
+    if (!input.eof())
+      numElements = ARRAY_SIZE;
+
+    else
+      numElements = static_cast<size_t>(input.gcount() / sizeof(uint32));
+
+    if(numElements == 0)
+      break;
+
+    counter = ++fileCounter;
+    }
+
+    SaveSorted(buffer, counter, numElements);
   }
 }
 
@@ -62,61 +68,37 @@ class SortedFileData
   string fileName;
 };*/
 
-bool Method(int& fileCounter)
+int SortParts()
 {
   //открыть файл на чтение
   ifstream input("input", ios::binary);
   if (!input.is_open())
-  {
-#ifdef WIN32
-    system("PAUSE");
-#endif
-    return false;//FIXME выбросить исключение
-  }
-  //создать буфер
-  vector<uint32> buffer(ARRAY_SIZE);
-  //создать 6 потоков
+    throw runtime_error("Can't open input file.");
 
-  //list<SortedFileData> fileDatas(6);//кол-во потоков из зад-я
+  input.seekg (0, input.end);
+  int length = input.tellg();
+  input.seekg (0, input.beg);
+
+  unsigned long const maxThreads = static_cast<long>(4 * ARRAY_SIZE + length) / (4 * ARRAY_SIZE);
   unsigned long const hardwareThreads = thread::hardware_concurrency();
-
-  struct stat fi;
-  stat("input", &fi);
-  unsigned long const maxThreads = static_cast<long>(4 * ARRAY_SIZE + fi.st_size) / (4 * ARRAY_SIZE);
-
   unsigned long const numThreads = min(hardwareThreads != 0 ? hardwareThreads : 2, maxThreads);
 
+  cout << "Number of threads: "<< numThreads << endl;
+
   vector<thread> threads(numThreads);
-  int retFlag = 1;
-  for (unsigned long i = 0; i < numThreads; ++i)
+  int fileCounter = 0;
+  for (auto& worker : threads)
   {
-    //каждому потоку передать позицию в файле, буфер, счетчик файлов
-    threads[i] = thread{ SortPartFile, ref(input), buffer, ref(fileCounter), ref(retFlag) };
+    //каждому потоку передать файл, счетчик файлов
+    worker = thread{ SortPartFile, ref(input), ref(fileCounter)};
   }
 
   //дожидаемся завершения всех потоков
-  for_each(threads.begin(), threads.end(), mem_fn(&thread::join));
-
-  //главный поток должен проверять, если у какого-то потока закончился кусок файла, то дать ещё работу. Тогда заменить numThreads - 1
-  //если пришли в деструктор потока и не конец файла, то дать ещё работу.
-
- for (;;)
- {
-   for (unsigned long i = 0; i < numThreads; ++i)
-   {
-     //каждому потоку передать позицию в файле, буфер, счетчик файлов
-     if(!threads[i].joinable() && retFlag != 2)
-       threads[i]{ SortPartFile, ref(input), buffer, ref(fileCounter), ref(retFlag) };
-//     if (retFlag == 2)
-//       break;
-   }
-//   if (retFlag == 2)
-//    break;
- }
-
-  return true;
+  for_each(threads.begin(), threads.end(), mem_fn(&thread::join)); 
+  return fileCounter;
 }
 
+#if 0
 bool SortParts(int& fileCounter)//сортировка частей файла
 {
   ifstream input("input", ios::binary);
@@ -139,6 +121,7 @@ bool SortParts(int& fileCounter)//сортировка частей файла
   }
   return true;
 }
+#endif
 
 struct MergedFileData
 {
@@ -218,13 +201,12 @@ void MergeParts(int fileCounter)
 
 int main()
 {
+  try
+  {
   // Получаем текущее время, используя высокоточный таймер.
   auto t1 = chrono::high_resolution_clock::now();
 
-  int fileCounter = 0;
-
-  if (!Method(fileCounter))
-    return 1;
+  int fileCounter = SortParts();
 
 //  if (!SortParts(fileCounter))
 //    return 1;
@@ -234,21 +216,12 @@ int main()
 
   //небольшой файл, весь поместился в ОП
   if (fileCounter == 1)
-  {
     rename("output1", "output");
-    chrono::duration<double> elapsed1 = t2 - t1;
-    // Отображаем результаты.
-    cout << "Sort temp files: " << elapsed1.count() << endl;
-#ifdef WIN32
-    system("PAUSE");
-#endif
-    return 0;
-  }
   else
     MergeParts(fileCounter);
 
 
-  // Опять определяем текущее время после выполнения другой операции.
+  // Определяем текущее время после выполнения другой операции.
   auto t3 = chrono::high_resolution_clock::now();
 
   // Определяем время выполнения первой функции.
@@ -265,8 +238,11 @@ int main()
   cout << "Merge temp files: " << elapsed2.count() << endl;
   cout << "Total time: " << elapsed3.count() << endl;
 
-  //FIXME сделать, чтобы по завершении работы программы сгенерированные файлы удалялись (оставался только output)
-#ifdef WIN32
-  system("PAUSE");
-#endif
+  }
+  catch(const exception& e)
+  {
+    cout << e.what() << endl;
+     return 1;
+  }
+  return 0;
 }
