@@ -13,7 +13,7 @@
 using namespace std;
 
 using uint32 = uint32_t; //!< Беззнаковое целое число длиной 4 байта
-const size_t ARRAY_SIZE = 26214400; //!< Размер массива в 100 Мб 4 байтных чисел
+const size_t ARRAY_SIZE = 120L * 1024 * 1024 / 4; //!< Размер массива в 120 Мб 4 байтных чисел
 
 
 void SaveSorted(vector<uint32> &arrayForSort, int fileCounter,
@@ -32,96 +32,78 @@ void SaveSorted(vector<uint32> &arrayForSort, int fileCounter,
   ostream.write(reinterpret_cast<char*>(arrayForSort.data()), numElements*sizeof(uint32));
 }
 
-mutex fileCounterMutex;
-
-void SortPartFile(std::ifstream &input, int & fileCounter)
+struct InputFile
 {
-  vector<uint32> buffer(ARRAY_SIZE);
-  int counter = 0;
-  size_t numElements = 0;
-  for(;;)
+  InputFile()
   {
-    {
-    lock_guard<mutex> lk(fileCounterMutex);
-    input.read(reinterpret_cast<char*>(buffer.data()), buffer.size() * sizeof(uint32));
-    if (!input.eof())
-      numElements = ARRAY_SIZE;
+    //открыть файл на чтение
+    inputFile.open("input", ios::binary);
+    if (!inputFile.is_open())
+      throw runtime_error("Can't open input file.");
 
+    inputFile.seekg (0, inputFile.end);
+    int length = inputFile.tellg();
+    inputFile.seekg (0, inputFile.beg);
+
+    const size_t maxThreads = static_cast<size_t>(4 * ARRAY_SIZE + length) / (4 * ARRAY_SIZE);
+    const size_t hardwareThreads = thread::hardware_concurrency();
+    numThreads = min(hardwareThreads != 0 ? hardwareThreads : 2, maxThreads);
+  }
+
+  bool ReadData(vector<uint32>& buffer, size_t& numElements, int& counter)
+  {
+    lock_guard<mutex> lk(inputFileMutex);
+    inputFile.read(reinterpret_cast<char*>(buffer.data()), buffer.size() * sizeof(uint32));
+
+    if (!inputFile.eof())
+      numElements = buffer.size();
     else
-      numElements = static_cast<size_t>(input.gcount() / sizeof(uint32));
+      numElements = static_cast<size_t>(inputFile.gcount() / sizeof(uint32));
 
-    if(numElements == 0)
-      break;
-
-    counter = ++fileCounter;
+    if(numElements != 0)
+    {
+      counter = ++fileCounter;
+      return true;
     }
 
-    SaveSorted(buffer, counter, numElements);
+    return false;
   }
-}
 
-/*
-class SortedFileData
-{
   ifstream inputFile;
-  int counter = 1;
-  string fileName;
-};*/
+  int fileCounter = 0;
+  size_t numThreads = 0;
+
+  mutex inputFileMutex;
+};
+
+void SortPartFile(InputFile &fileData)
+{
+  vector<uint32> buffer(ARRAY_SIZE/fileData.numThreads);
+  size_t numElements = 0;
+  int counter = 0;
+
+  while(fileData.ReadData(buffer, numElements, counter))
+    SaveSorted(buffer, counter, numElements);
+}
 
 int SortParts()
 {
-  //открыть файл на чтение
-  ifstream input("input", ios::binary);
-  if (!input.is_open())
-    throw runtime_error("Can't open input file.");
+  InputFile fileData;
 
-  input.seekg (0, input.end);
-  int length = input.tellg();
-  input.seekg (0, input.beg);
+  cout << "Number of threads: "<< fileData.numThreads << endl;
 
-  unsigned long const maxThreads = static_cast<long>(4 * ARRAY_SIZE + length) / (4 * ARRAY_SIZE);
-  unsigned long const hardwareThreads = thread::hardware_concurrency();
-  unsigned long const numThreads = min(hardwareThreads != 0 ? hardwareThreads : 2, maxThreads);
+  vector<thread> threads(fileData.numThreads);
 
-  cout << "Number of threads: "<< numThreads << endl;
-
-  vector<thread> threads(numThreads);
-  int fileCounter = 0;
   for (auto& worker : threads)
   {
     //каждому потоку передать файл, счетчик файлов
-    worker = thread{ SortPartFile, ref(input), ref(fileCounter)};
+    worker = thread{ SortPartFile, ref(fileData)};
   }
 
   //дожидаемся завершения всех потоков
   for_each(threads.begin(), threads.end(), mem_fn(&thread::join)); 
-  return fileCounter;
+  return fileData.fileCounter;
 }
-
-#if 0
-bool SortParts(int& fileCounter)//сортировка частей файла
-{
-  ifstream input("input", ios::binary);
-  if (!input.is_open())
-  {
-#ifdef WIN32
-    system("PAUSE");
-#endif
-    return false;//FIXME выбросить исключение
-  }
-
-  vector<uint32> buffer(ARRAY_SIZE);
-  fileCounter = 0;
-
-  for (;;)
-  {
-    int retflag;
-    SortPartFile(input, buffer, fileCounter, retflag);
-    if (retflag == 2) break;
-  }
-  return true;
-}
-#endif
 
 struct MergedFileData
 {
