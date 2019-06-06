@@ -189,15 +189,13 @@ void MergeParts(int fileCounter)
 
   sort(dataPointers.begin(), dataPointers.end(),
        [](const auto& l, const auto& r)
-       {return l->number < r->number;});
+       {return r->number < l->number;});//сортировка по убыванию
 
   vector<uint32> outData(ARRAY_SIZE);
   size_t outPos = 0;
   while (dataPointers.size() > 1)
   {
-    MergedFileData* ptrToMinValue = dataPointers.front();/*min_element(fileDatas.begin(), fileDatas.end(),
-                             [](const auto& l_, const auto& r_)
-                             { return l_.number < r_.number; });*/
+    MergedFileData* ptrToMinValue = dataPointers.back();
 
     if (outPos >= ARRAY_SIZE)
     {
@@ -208,7 +206,7 @@ void MergeParts(int fileCounter)
     outData[outPos] = ptrToMinValue->number;
     ++outPos;
 
-    dataPointers.erase(dataPointers.begin());
+    dataPointers.pop_back();
 
     if (!ptrToMinValue->GetNextNumber())
       ptrToMinValue->RemoveInputFile();
@@ -217,7 +215,7 @@ void MergeParts(int fileCounter)
       auto itNewPos = lower_bound(dataPointers.begin(), dataPointers.end(),
                                   ptrToMinValue->number,
                                   [](const auto& it, const auto& value)
-                                  {return it->number < value;});
+                                  {return value < it->number;});
       dataPointers.insert(itNewPos, ptrToMinValue);
     }
   }
