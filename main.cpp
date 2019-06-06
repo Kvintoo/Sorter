@@ -141,6 +141,21 @@ struct MergedFileData
 
     return false;
   }
+
+  void WriteTail(fstream& output)
+  {
+    output.write(reinterpret_cast<char*>(&number), sizeof(uint32));
+    output.write(reinterpret_cast<char*>(buffer.data()), (maxPos - currentPos)*sizeof(uint32));
+
+    output << inputFile.rdbuf();
+  }
+
+  void RemoveInputFile()
+  {
+    inputFile.close();
+    remove(fileName.c_str());
+  }
+
   ifstream inputFile;
   uint32 number = 0;
   vector<uint32> buffer;
@@ -155,10 +170,13 @@ void MergeParts(int fileCounter)
   if (!output.is_open())
     throw runtime_error("Can't open output file.");
 
-  list<MergedFileData> fileDatas(fileCounter);
+  //размер вектора менять нельзя, т.к. тогда указатели dataPointers станут невалидны
+  vector<MergedFileData> fileDatas(fileCounter);
+  vector<MergedFileData*> dataPointers(fileDatas.size());
   int fileNumber = 1;
-  for (auto& fileData : fileDatas)
+  for (size_t i = 0; i < fileDatas.size(); ++i)
   {
+    auto& fileData = fileDatas[i];
     fileData.fileName = "output" + to_string(fileNumber);
     ++fileNumber;
     fileData.inputFile.open(fileData.fileName, ios::binary);
@@ -166,15 +184,20 @@ void MergeParts(int fileCounter)
       throw runtime_error("Can't open file: " + fileData.fileName);
 
     fileData.ReadData(fileCounter);
+    dataPointers[i] = &fileData;
   }
+
+  sort(dataPointers.begin(), dataPointers.end(),
+       [](const auto& l, const auto& r)
+       {return l->number < r->number;});
 
   vector<uint32> outData(ARRAY_SIZE);
   size_t outPos = 0;
-  while (fileDatas.size() > 1)
+  while (dataPointers.size() > 1)
   {
-    auto itMin = min_element(fileDatas.begin(), fileDatas.end(),
+    MergedFileData* ptrToMinValue = dataPointers.front();/*min_element(fileDatas.begin(), fileDatas.end(),
                              [](const auto& l_, const auto& r_)
-                             { return l_.number < r_.number; });
+                             { return l_.number < r_.number; });*/
 
     if (outPos >= ARRAY_SIZE)
     {
@@ -182,26 +205,27 @@ void MergeParts(int fileCounter)
       outPos = 0;
     }
 
-    outData[outPos] = itMin->number;
+    outData[outPos] = ptrToMinValue->number;
     ++outPos;
 
-    if (!itMin->GetNextNumber())
+    dataPointers.erase(dataPointers.begin());
+
+    if (!ptrToMinValue->GetNextNumber())
+      ptrToMinValue->RemoveInputFile();
+    else
     {
-      const string fileName(itMin->fileName);
-      fileDatas.erase(itMin);
-      remove(fileName.c_str());
+      auto itNewPos = lower_bound(dataPointers.begin(), dataPointers.end(),
+                                  ptrToMinValue->number,
+                                  [](const auto& it, const auto& value)
+                                  {return it->number < value;});
+      dataPointers.insert(itNewPos, ptrToMinValue);
     }
   }
 
   output.write(reinterpret_cast<char*>(outData.data()), outPos*sizeof(uint32));
-  auto& lastFile = fileDatas.front();
-  output.write(reinterpret_cast<char*>(&lastFile.number), sizeof(uint32));
-
-  output << lastFile.inputFile.rdbuf();
-
-  const string fileName(lastFile.fileName);
-  fileDatas.clear();
-  remove(fileName.c_str());
+  auto& lastFile = *dataPointers.front();
+  lastFile.WriteTail(output);
+  lastFile.RemoveInputFile();
 
   //NOTE можно считывать сразу несколько чисел в массивы и их анализировать, если это будет проще
   //сравниваем все числа из всех потоков. Наименьшее записываем в выходной массив.
