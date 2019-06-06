@@ -19,6 +19,7 @@ const size_t ARRAY_SIZE = 120L * 1024 * 1024 / 4; //!< Размер массив
 void SaveSorted(vector<uint32> &arrayForSort, int fileCounter,
                 size_t numElements)
 {
+  //lock_guard<mutex> lk(inputFileMutex);
   vector<uint32>::iterator itEnd = arrayForSort.begin() + numElements;
 
   sort(arrayForSort.begin(), itEnd);
@@ -42,7 +43,7 @@ struct InputFile
       throw runtime_error("Can't open input file.");
 
     inputFile.seekg (0, inputFile.end);
-    int length = inputFile.tellg();
+    long length = static_cast<long>(inputFile.tellg());
     inputFile.seekg (0, inputFile.beg);
 
     const size_t maxThreads = static_cast<size_t>(4 * ARRAY_SIZE + length) / (4 * ARRAY_SIZE);
@@ -78,7 +79,7 @@ struct InputFile
 
 void SortPartFile(InputFile &fileData)
 {
-  vector<uint32> buffer(ARRAY_SIZE/fileData.numThreads);
+  vector<uint32> buffer(ARRAY_SIZE / fileData.numThreads);
   size_t numElements = 0;
   int counter = 0;
 
@@ -91,14 +92,10 @@ int SortParts()
   InputFile fileData;
 
   cout << "Number of threads: "<< fileData.numThreads << endl;
-
   vector<thread> threads(fileData.numThreads);
 
   for (auto& worker : threads)
-  {
-    //каждому потоку передать файл, счетчик файлов
     worker = thread{ SortPartFile, ref(fileData)};
-  }
 
   //дожидаемся завершения всех потоков
   for_each(threads.begin(), threads.end(), mem_fn(&thread::join)); 
@@ -107,19 +104,57 @@ int SortParts()
 
 struct MergedFileData
 {
+  void ReadData()
+  {
+    currentPos = 0;
+    inputFile.read(reinterpret_cast<char*>(buffer.data()), buffer.size() * sizeof(uint32));
+
+    if (!inputFile.eof())
+      maxPos = buffer.size();
+    else
+      maxPos = static_cast<size_t>(inputFile.gcount() / sizeof(uint32));
+
+    if (maxPos)
+      number = buffer[0];
+
+    ++currentPos;
+  }
+
+  void ReadData(int fileCount)
+  {
+    buffer.resize(ARRAY_SIZE / fileCount);
+    ReadData();
+  }
+
+  bool GetNumber()
+  {
+    if (currentPos < maxPos)
+    {
+      number = buffer[currentPos];
+      ++currentPos;
+      return true;
+    }
+    else if (!inputFile.eof())
+    {
+      ReadData();
+      return true;
+    }
+
+    return false;
+  }
   ifstream inputFile;
   uint32 number = 0;
+  vector<uint32> buffer;
   string fileName;
+  int currentPos = 0;
+  int maxPos = 0;
 };
 
 void MergeParts(int fileCounter)
 {
   fstream output("output", ios::binary | ios::out);
   if (!output.is_open())
-  {
-    cout << "failed to open " << "output" << '\n';
-    return;
-  }
+    throw runtime_error("Can't open output file.");
 
   list<MergedFileData> fileDatas(fileCounter);
   int fileNumber = 1;
@@ -129,9 +164,9 @@ void MergeParts(int fileCounter)
     ++fileNumber;
     fileData.inputFile.open(fileData.fileName, ios::binary);
     if (!fileData.inputFile.is_open())
-      return;//FIXME переделать на исключение
+      throw runtime_error("Can't open file."/*string("Can't open %s file.", fileData.fileName)*/);//FIXME сделать правильное сообщение
 
-    fileData.inputFile.read(reinterpret_cast<char*>(&fileData.number), sizeof(uint32));
+    fileData.ReadData(fileCounter);
   }
 
   vector<uint32> outData(ARRAY_SIZE);
@@ -151,8 +186,8 @@ void MergeParts(int fileCounter)
     outData[outPos] = itMin->number;
     ++outPos;
 
-    itMin->inputFile.read(reinterpret_cast<char*>(&itMin->number), sizeof(uint32));
-    if (itMin->inputFile.eof())
+    //itMin->inputFile.read(reinterpret_cast<char*>(&itMin->number), sizeof(uint32));
+    if (!itMin->GetNumber()/*itMin->inputFile.eof()*/)
     {
       const string fileName(itMin->fileName);
       fileDatas.erase(itMin);
@@ -190,9 +225,6 @@ int main()
 
   int fileCounter = SortParts();
 
-//  if (!SortParts(fileCounter))
-//    return 1;
-
   // Снова получаем текущее время после выполнения операции.
   auto t2 = chrono::high_resolution_clock::now();
 
@@ -201,8 +233,7 @@ int main()
     rename("output1", "output");
   else
     MergeParts(fileCounter);
-
-
+  
   // Определяем текущее время после выполнения другой операции.
   auto t3 = chrono::high_resolution_clock::now();
 
