@@ -19,7 +19,6 @@ const size_t ARRAY_SIZE = 120L * 1024 * 1024 / 4; //!< Размер массив
 void SaveSorted(vector<uint32> &arrayForSort, int fileCounter,
                 size_t numElements)
 {
-  //lock_guard<mutex> lk(inputFileMutex);
   vector<uint32>::iterator itEnd = arrayForSort.begin() + numElements;
 
   sort(arrayForSort.begin(), itEnd);
@@ -102,11 +101,11 @@ int SortParts()
   return fileData.fileCounter;
 }
 
+////////////////////////////////////////////////////////////////////////////////
 struct MergedFileData
 {
   void ReadData()
   {
-    currentPos = 0;
     inputFile.read(reinterpret_cast<char*>(buffer.data()), buffer.size() * sizeof(uint32));
 
     if (!inputFile.eof())
@@ -117,7 +116,7 @@ struct MergedFileData
     if (maxPos)
       number = buffer[0];
 
-    ++currentPos;
+    currentPos = 1;
   }
 
   void ReadData(int fileCount)
@@ -126,7 +125,7 @@ struct MergedFileData
     ReadData();
   }
 
-  bool GetNumber()
+  bool GetNextNumber()
   {
     if (currentPos < maxPos)
     {
@@ -137,7 +136,7 @@ struct MergedFileData
     else if (!inputFile.eof())
     {
       ReadData();
-      return true;
+      return maxPos > 0;
     }
 
     return false;
@@ -164,7 +163,7 @@ void MergeParts(int fileCounter)
     ++fileNumber;
     fileData.inputFile.open(fileData.fileName, ios::binary);
     if (!fileData.inputFile.is_open())
-      throw runtime_error("Can't open file."/*string("Can't open %s file.", fileData.fileName)*/);//FIXME сделать правильное сообщение
+      throw runtime_error("Can't open file: " + fileData.fileName);
 
     fileData.ReadData(fileCounter);
   }
@@ -186,8 +185,7 @@ void MergeParts(int fileCounter)
     outData[outPos] = itMin->number;
     ++outPos;
 
-    //itMin->inputFile.read(reinterpret_cast<char*>(&itMin->number), sizeof(uint32));
-    if (!itMin->GetNumber()/*itMin->inputFile.eof()*/)
+    if (!itMin->GetNextNumber())
     {
       const string fileName(itMin->fileName);
       fileDatas.erase(itMin);
