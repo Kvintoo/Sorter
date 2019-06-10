@@ -3,33 +3,32 @@
 #include <string>
 #include <algorithm>
 #include <vector>
-#include <list>
 #include <thread>
 #include <mutex>
 
+//#define MEASURE_TIME
 // Файл для функций и классов работы со временем.
+#ifdef MEASURE_TIME
 #include <chrono>
+#endif
 
 using namespace std;
 
-using uint32 = uint32_t; //!< Беззнаковое целое число длиной 4 байта
-const size_t ARRAY_SIZE = 120L * 1024 * 1024 / 4; //!< Размер массива в 120 Мб 4 байтных чисел
+const size_t ARRAY_SIZE = 120L * 1024 * 1024 / 4; // Размер массива в 120 Мб 4 байтных чисел
 
 
-void SaveSorted(vector<uint32> &arrayForSort, int fileCounter,
+void SaveSorted(vector<uint32_t> &arrayForSort, int fileCounter,
                 size_t numElements)
 {
-  vector<uint32>::iterator itEnd = arrayForSort.begin() + numElements;
+  vector<uint32_t>::iterator itEnd = arrayForSort.begin() + numElements;
 
   sort(arrayForSort.begin(), itEnd);
   string fileName = "output" + to_string(fileCounter);
   fstream ostream(fileName, ios::binary | ios::out);
   if (!ostream.is_open())
-  {
-    cout << "failed to open " << fileName << '\n';
-  }
+    throw runtime_error("Can't open file: " + fileName);
 
-  ostream.write(reinterpret_cast<char*>(arrayForSort.data()), numElements*sizeof(uint32));
+  ostream.write(reinterpret_cast<char*>(arrayForSort.data()), numElements*sizeof(uint32_t));
 }
 
 struct InputFile
@@ -50,15 +49,15 @@ struct InputFile
     numThreads = min(hardwareThreads != 0 ? hardwareThreads : 2, maxThreads);
   }
 
-  bool ReadData(vector<uint32>& buffer, size_t& numElements, int& counter)
+  bool ReadData(vector<uint32_t>& buffer, size_t& numElements, int& counter)
   {
     lock_guard<mutex> lk(inputFileMutex);
-    inputFile.read(reinterpret_cast<char*>(buffer.data()), buffer.size() * sizeof(uint32));
+    inputFile.read(reinterpret_cast<char*>(buffer.data()), buffer.size() * sizeof(uint32_t));
 
     if (!inputFile.eof())
       numElements = buffer.size();
     else
-      numElements = static_cast<size_t>(inputFile.gcount() / sizeof(uint32));
+      numElements = static_cast<size_t>(inputFile.gcount() / sizeof(uint32_t));
 
     if(numElements != 0)
     {
@@ -78,7 +77,11 @@ struct InputFile
 
 void SortPartFile(InputFile &fileData)
 {
-  vector<uint32> buffer(ARRAY_SIZE / fileData.numThreads);
+  //размер буфера определяется в зависимости от длины файла и
+  //количества ядер на компьютере
+  //на компьютере с большим количеством ядер и малым объемом памяти
+  //алгоритм будет генерировать слишком много мелких файлов
+  vector<uint32_t> buffer(ARRAY_SIZE / fileData.numThreads);
   size_t numElements = 0;
   int counter = 0;
 
@@ -89,8 +92,6 @@ void SortPartFile(InputFile &fileData)
 int SortParts()
 {
   InputFile fileData;
-
-  cout << "Number of threads: "<< fileData.numThreads << endl;
   vector<thread> threads(fileData.numThreads);
 
   for (auto& worker : threads)
@@ -106,16 +107,18 @@ struct MergedFileData
 {
   void ReadData()
   {
-    inputFile.read(reinterpret_cast<char*>(buffer.data()), buffer.size() * sizeof(uint32));
+    inputFile.read(reinterpret_cast<char*>(buffer.data()), buffer.size() * sizeof(uint32_t));
 
     if (!inputFile.eof())
       maxPos = buffer.size();
     else
-      maxPos = static_cast<size_t>(inputFile.gcount() / sizeof(uint32));
+      maxPos = static_cast<size_t>(inputFile.gcount() / sizeof(uint32_t));
 
     if (maxPos)
       number = buffer[0];
 
+    //равен 1, т.к. из буфера уже присвоено одно значение number
+    //если maxPos = 0, то значение currentPos не важно
     currentPos = 1;
   }
 
@@ -144,8 +147,8 @@ struct MergedFileData
 
   void WriteTail(fstream& output)
   {
-    output.write(reinterpret_cast<char*>(&number), sizeof(uint32));
-    output.write(reinterpret_cast<char*>(buffer.data()), (maxPos - currentPos)*sizeof(uint32));
+    output.write(reinterpret_cast<char*>(&number), sizeof(uint32_t));
+    output.write(reinterpret_cast<char*>(buffer.data()), (maxPos - currentPos)*sizeof(uint32_t));
 
     output << inputFile.rdbuf();
   }
@@ -157,8 +160,8 @@ struct MergedFileData
   }
 
   ifstream inputFile;
-  uint32 number = 0;
-  vector<uint32> buffer;
+  uint32_t number = 0;
+  vector<uint32_t> buffer;
   string fileName;
   int currentPos = 0;
   int maxPos = 0;
@@ -166,6 +169,13 @@ struct MergedFileData
 
 void MergeParts(int fileCounter)
 {
+  //сравниваются все числа из всех потоков, наименьшее записывается в выходной массив
+  //для ускорения алгоритмя используется буфер, в который зачитываются числа из файлов
+  //у каждого файла свой буфер
+  //как только выходной массив достигает максимального значения, записываем массив в выходной файл
+  //делаем так пока все файлы не будут дочитаны до конца
+  //если останется один недочитанный файл, а остальные уже будут дочитаны,
+  //то его содержимое от текущей позиции до конца переписываем в выходной файл
   fstream output("output", ios::binary | ios::out);
   if (!output.is_open())
     throw runtime_error("Can't open output file.");
@@ -191,7 +201,7 @@ void MergeParts(int fileCounter)
        [](const auto& l, const auto& r)
        {return r->number < l->number;});//сортировка по убыванию
 
-  vector<uint32> outData(ARRAY_SIZE);
+  vector<uint32_t> outData(ARRAY_SIZE);
   size_t outPos = 0;
   while (dataPointers.size() > 1)
   {
@@ -199,7 +209,7 @@ void MergeParts(int fileCounter)
 
     if (outPos >= ARRAY_SIZE)
     {
-      output.write(reinterpret_cast<char*>(outData.data()), outData.size()*sizeof(uint32));
+      output.write(reinterpret_cast<char*>(outData.data()), outData.size()*sizeof(uint32_t));
       outPos = 0;
     }
 
@@ -220,17 +230,10 @@ void MergeParts(int fileCounter)
     }
   }
 
-  output.write(reinterpret_cast<char*>(outData.data()), outPos*sizeof(uint32));
+  output.write(reinterpret_cast<char*>(outData.data()), outPos*sizeof(uint32_t));
   auto& lastFile = *dataPointers.front();
   lastFile.WriteTail(output);
   lastFile.RemoveInputFile();
-
-  //NOTE можно считывать сразу несколько чисел в массивы и их анализировать, если это будет проще
-  //сравниваем все числа из всех потоков. Наименьшее записываем в выходной массив.
-  //как только выходной массив достигает максимального значения, записываем массив в выходной файл
-  //делаем так пока все файлы не будут дочитаны до конца
-  //если останется один недочитанный файл, а остальные уже будут дочитаны, 
-  //то его содержимое от позиции до конца переписываем в выходной файл
 }
 
 
@@ -240,6 +243,7 @@ int main()
 {
   try
   {
+#ifdef MEASURE_TIME
   // Получаем текущее время, используя высокоточный таймер.
   auto t1 = chrono::high_resolution_clock::now();
 
@@ -270,6 +274,15 @@ int main()
   cout << "Sort temp files: " << elapsed1.count() << endl;
   cout << "Merge temp files: " << elapsed2.count() << endl;
   cout << "Total time: " << elapsed3.count() << endl;
+#else
+    int fileCounter = SortParts();
+
+    //небольшой файл, весь поместился в ОП
+    if (fileCounter == 1)
+      rename("output1", "output");
+    else
+      MergeParts(fileCounter);
+#endif
 
   }
   catch(const exception& e)
