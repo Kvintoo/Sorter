@@ -19,20 +19,6 @@ using namespace std;
 const size_t ARRAY_SIZE = 120L * 1024 * 1024 / 4; // Размер массива в 120 Мб 4 байтных чисел
 
 
-void SaveSorted(vector<uint32_t> &arrayForSort, int fileCounter,
-                size_t numElements)
-{
-  vector<uint32_t>::iterator itEnd = arrayForSort.begin() + numElements;
-
-  sort(arrayForSort.begin(), itEnd);
-  string fileName = "output" + to_string(fileCounter);
-  fstream ostream(fileName, ios::binary | ios::out);
-  if (!ostream.is_open())
-    throw runtime_error("Can't open file: " + fileName);
-
-  ostream.write(reinterpret_cast<char*>(arrayForSort.data()), numElements*sizeof(uint32_t));
-}
-
 struct SortBufferData
 {
   void SetSize(size_t size)
@@ -46,14 +32,9 @@ struct SortBufferData
     ++currentPos;
   }
 
-  bool GetNextNumber()
+  bool HasNextNumber() const
   {
-    if (currentPos < maxPos)
-    {
-      GetNumber();
-      return true;
-    }
-    return false;
+    return currentPos < maxPos;
   }
 
   void WriteTail(fstream& output)
@@ -102,47 +83,27 @@ struct InputFile
   size_t numThreads = 0;
 
   mutex inputFileMutex;
-  exception_ptr exceptptr = nullptr;
 };
-
-
 
 void SortPartFile(InputFile &fileData, SortBufferData& bufferData)
 {
-  //размер буфера определяется в зависимости от длины файла и
-  //количества ядер на компьютере
-  //на компьютере с большим количеством ядер и малым объемом памяти
-  //алгоритм будет генерировать слишком много мелких файлов
-
-  try
-  {
-    bufferData.currentPos = 0;
-    fileData.ReadData(bufferData);
-    sort(bufferData.buffer.begin(), bufferData.buffer.begin() + bufferData.maxPos,
-         [](const auto& l, const auto& r)
-         {return l < r;});//сортировка по возрастанию
-  }
-  catch (...)
-  {
-    fileData.exceptptr = current_exception();
-  }
+  bufferData.currentPos = 0;
+  fileData.ReadData(bufferData);
+  sort(bufferData.buffer.begin(), bufferData.buffer.begin() + bufferData.maxPos,
+       [](const auto& l, const auto& r)
+       {return l < r;});//сортировка по возрастанию
 }
 
-
-
-void Merge(vector<SortBufferData*> dataPointers, int& fileCounter)
+void Merge(vector<SortBufferData>& buffers, int& fileCounter)
 {
-  for (size_t i = 0; i < dataPointers.size();)
+  vector<SortBufferData*> dataPointers;
+  dataPointers.reserve(buffers.size());
+  for (size_t i = 0; i < buffers.size(); ++i)
   {
-    if (dataPointers[i]->maxPos == 0)
+    if (buffers[i].maxPos != 0)
     {
-      //cout << "Erase dataPointers - " << i << endl;
-      dataPointers.erase(dataPointers.begin() + i);
-    }
-    else
-    {
-      dataPointers[i]->GetNumber();
-      ++i;
+      dataPointers.push_back(&buffers[i]);
+      dataPointers.back()->GetNumber();
     }
   }
 
@@ -173,20 +134,21 @@ void Merge(vector<SortBufferData*> dataPointers, int& fileCounter)
     outData[outPos] = ptrToMinValue->number;
     ++outPos;
 
-    if (ptrToMinValue->GetNextNumber())
+    if (ptrToMinValue->HasNextNumber())
     {
+      ptrToMinValue->GetNumber();
       if (ptrToMinValue->number <= dataPointers[dataPointers.size()-2]->number)
         continue;
 
       dataPointers.pop_back();
 
       //вставляем указатель на новое прочитанное значение в правильную позицию
-      //в отсортированном массиве указателей на значения
-      //ищем позицию для нового значения из файла, в котором было предыдущее минимальное значение
+      //в массиве указателей, отсортированном по убыванию значений
+      //ищем позицию для нового значения из буфера, в котором было предыдущее минимальное значение
       auto itNewPos = lower_bound(dataPointers.begin(), dataPointers.end(),
                                   ptrToMinValue->number,
                                   [](const auto& it, const auto& value)
-                                  {return value < it->number; });//поиск с конца в начало
+                                  {return value < it->number; });
       dataPointers.insert(itNewPos, ptrToMinValue);//вставка в найденную позицию
     }
     else
@@ -205,12 +167,9 @@ int SortParts()
   vector<thread> threads(fileData.numThreads);
 
   vector<SortBufferData> buffers(fileData.numThreads);
-  vector<SortBufferData*> dataPointers(fileData.numThreads);
+  //размер буфера определяется в зависимости от количества ядер на компьютере
   for (size_t i = 0; i < buffers.size(); ++i)
-  {
-    buffers[i].SetSize(ARRAY_SIZE / fileData.numThreads);
-    dataPointers[i] = &buffers[i];
-  }  
+    buffers[i].SetSize(ARRAY_SIZE / fileData.numThreads); 
 
   while (!fileData.inputFile.eof())
   {
@@ -221,12 +180,8 @@ int SortParts()
     //дожидаемся завершения всех потоков
     for_each(threads.begin(), threads.end(), mem_fn(&thread::join));
     //главный поток объединяет данные из буферов и сохраняет в файл
-    Merge(dataPointers, fileData.fileCounter);
+    Merge(buffers, fileData.fileCounter);
   }
-  //дожидаемся завершения всех потоков
-  //for_each(threads.begin(), threads.end(), mem_fn(&thread::join)); 
-  if(fileData.exceptptr)
-    rethrow_exception(fileData.exceptptr);
 
   return fileData.fileCounter;
 }
@@ -349,8 +304,6 @@ void MergeParts(int fileCounter)
     outData[outPos] = ptrToMinValue->number;
     ++outPos;
 
-    //dataPointers.pop_back();
-
     if (!ptrToMinValue->GetNextNumber())
     {
       dataPointers.pop_back();
@@ -378,9 +331,6 @@ void MergeParts(int fileCounter)
   lastFile.WriteTail(output);
   lastFile.RemoveInputFile();
 }
-
-
-
 
 int main()
 {
