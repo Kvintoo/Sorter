@@ -203,10 +203,10 @@ struct MergedFileData
     currentPos = 1;
   }
 
-  void ReadData(int fileCount)
+  void ReadData(size_t bufSize)
   {
     //начальное определение размера буфера для ускорения работы
-    buffer.resize(ARRAY_SIZE / fileCount);
+    buffer.resize(bufSize);
     ReadData();
   }
 
@@ -268,6 +268,9 @@ void MergeParts(int fileCounter)
   vector<MergedFileData> fileDatas(fileCounter);
   vector<MergedFileData*> dataPointers(fileDatas.size());
   int fileNumber = 1;
+
+  const size_t outputBufferSize = ARRAY_SIZE / 2; // Размер буфера для записи выходного файла
+  const size_t inputBufferSize = outputBufferSize / fileCounter;
   for (size_t i = 0; i < fileDatas.size(); ++i)
   {
     auto& fileData = fileDatas[i];
@@ -278,7 +281,7 @@ void MergeParts(int fileCounter)
       throw runtime_error("Can't open file: " + fileData.fileName);
 
     //зачитываемые файлы всегда непустые
-    fileData.ReadData(fileCounter);
+    fileData.ReadData(inputBufferSize);
     dataPointers[i] = &fileData;
   }
 
@@ -286,11 +289,11 @@ void MergeParts(int fileCounter)
        [](const auto& l, const auto& r)
        {return r->number < l->number;});//сортировка по убыванию
 
-  vector<uint32_t> outData(ARRAY_SIZE);
+  vector<uint32_t> outData(outputBufferSize);
   size_t outPos = 0;
   while (dataPointers.size() > 1)
   {
-    if (outPos >= ARRAY_SIZE)
+    if (outPos >= outData.size())
     {
       output.write(reinterpret_cast<char*>(outData.data()), outData.size()*sizeof(uint32_t));
       outPos = 0;
