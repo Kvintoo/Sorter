@@ -16,10 +16,10 @@
 
 using namespace std;
 
-// Размер массива в 124 Мб 4 байтных чисел
-const size_t SORT_BUFFER_SIZE = 124L * 1024 * 1024 / 4;
-// Максимальный суммарный размер всех буферов при слиянии (127 Мб)
-const size_t MERGE_BUFFER_SIZE = 127L * 1024 * 1024 / 4;
+// Размер массива в 80 Мб 4 байтных чисел
+const size_t SORT_BUFFER_SIZE = 80L * 1024 * 1024 / 4;
+// Максимальный суммарный размер всех буферов при слиянии (80 Мб)
+const size_t MERGE_BUFFER_SIZE = 80L * 1024 * 1024 / 4;
 
 
 struct SortBufferData
@@ -388,7 +388,7 @@ int main()
   catch(const exception& e)
   {
     cout << "ERROR: " << e.what() << endl;
-     return 1;
+    return 1;
   }
   return 0;
 }
