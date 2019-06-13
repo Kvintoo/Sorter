@@ -63,6 +63,9 @@ struct InputFile
 
     inputFile.seekg(0, inputFile.end);
     size_t length = static_cast<size_t>(inputFile.tellg());
+    if(length == 0 || (length % 4) != 0)
+      throw runtime_error("Invalid size of input file.");
+
     inputFile.seekg(0, inputFile.beg);
 
     const size_t maxThreads = static_cast<size_t>(4 * SORT_BUFFER_SIZE + length) / (4 * SORT_BUFFER_SIZE);
