@@ -8,7 +8,7 @@
 #include <exception>
 #include <functional>
 
-#define MEASURE_TIME
+//#define MEASURE_TIME
 // Файл для функций и классов работы со временем.
 #ifdef MEASURE_TIME
 #include <chrono>
@@ -58,9 +58,9 @@ struct InputFile
     if (!inputFile.is_open())
       throw runtime_error("Can't open input file.");
 
-    inputFile.seekg (0, inputFile.end);
-    long length = static_cast<long>(inputFile.tellg());
-    inputFile.seekg (0, inputFile.beg);
+    inputFile.seekg(0, inputFile.end);
+    size_t length = static_cast<size_t>(inputFile.tellg());
+    inputFile.seekg(0, inputFile.beg);
 
     const size_t maxThreads = static_cast<size_t>(4 * ARRAY_SIZE + length) / (4 * ARRAY_SIZE);
     const size_t hardwareThreads = thread::hardware_concurrency();
@@ -90,8 +90,8 @@ void SortPartFile(InputFile &fileData, SortBufferData& bufferData)
   bufferData.currentPos = 0;
   fileData.ReadData(bufferData);
   sort(bufferData.buffer.begin(), bufferData.buffer.begin() + bufferData.maxPos,
-       [](const auto& l, const auto& r)
-       {return l < r;});//сортировка по возрастанию
+      [](const auto& l, const auto& r)
+      {return l < r; });//сортировка по возрастанию
 }
 
 void Merge(vector<SortBufferData>& buffers, int& fileCounter)
@@ -123,14 +123,13 @@ void Merge(vector<SortBufferData>& buffers, int& fileCounter)
   size_t outPos = 0;
   while (dataPointers.size() > 1)
   {
-    SortBufferData* ptrToMinValue = dataPointers.back();
-
     if (outPos >= outData.size())
     {
       output.write(reinterpret_cast<char*>(outData.data()), outData.size() * sizeof(uint32_t));
       outPos = 0;
     }
 
+    SortBufferData* ptrToMinValue = dataPointers.back();
     outData[outPos] = ptrToMinValue->number;
     ++outPos;
 
@@ -149,7 +148,7 @@ void Merge(vector<SortBufferData>& buffers, int& fileCounter)
                                   ptrToMinValue->number,
                                   [](const auto& it, const auto& value)
                                   {return value < it->number; });
-      dataPointers.insert(itNewPos, ptrToMinValue);//вставка в найденную позицию
+      dataPointers.insert(itNewPos, ptrToMinValue);
     }
     else
       dataPointers.pop_back();
@@ -165,7 +164,6 @@ int SortParts()
 {
   InputFile fileData;
   vector<thread> threads(fileData.numThreads);
-
   vector<SortBufferData> buffers(fileData.numThreads);
   //размер буфера определяется в зависимости от количества ядер на компьютере
   for (size_t i = 0; i < buffers.size(); ++i)
@@ -174,9 +172,8 @@ int SortParts()
   while (!fileData.inputFile.eof())
   {
     for (size_t i = 0; i < threads.size(); ++i)
-    {
       threads[i] = thread{ SortPartFile, ref(fileData), ref(buffers[i]) };
-    }
+
     //дожидаемся завершения всех потоков
     for_each(threads.begin(), threads.end(), mem_fn(&thread::join));
     //главный поток объединяет данные из буферов и сохраняет в файл
@@ -293,14 +290,13 @@ void MergeParts(int fileCounter)
   size_t outPos = 0;
   while (dataPointers.size() > 1)
   {
-    MergedFileData* ptrToMinValue = dataPointers.back();
-
     if (outPos >= ARRAY_SIZE)
     {
       output.write(reinterpret_cast<char*>(outData.data()), outData.size()*sizeof(uint32_t));
       outPos = 0;
     }
 
+    MergedFileData* ptrToMinValue = dataPointers.back();
     outData[outPos] = ptrToMinValue->number;
     ++outPos;
 
@@ -320,8 +316,8 @@ void MergeParts(int fileCounter)
       auto itNewPos = lower_bound(dataPointers.begin(), dataPointers.end(),
                                   ptrToMinValue->number,
                                   [](const auto& it, const auto& value)
-                                  {return value < it->number;});//поиск с конца в начало
-      dataPointers.insert(itNewPos, ptrToMinValue);//вставка в найденную позицию
+                                  {return value < it->number;});
+      dataPointers.insert(itNewPos, ptrToMinValue);
     }
   }
 
