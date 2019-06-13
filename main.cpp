@@ -16,7 +16,10 @@
 
 using namespace std;
 
-const size_t ARRAY_SIZE = 120L * 1024 * 1024 / 4; // Размер массива в 120 Мб 4 байтных чисел
+// Размер массива в 124 Мб 4 байтных чисел
+const size_t SORT_BUFFER_SIZE = 124L * 1024 * 1024 / 4;
+// Максимальный суммарный размер всех буферов при слиянии (127 Мб)
+const size_t MERGE_BUFFER_SIZE = 127L * 1024 * 1024 / 4;
 
 
 struct SortBufferData
@@ -62,7 +65,7 @@ struct InputFile
     size_t length = static_cast<size_t>(inputFile.tellg());
     inputFile.seekg(0, inputFile.beg);
 
-    const size_t maxThreads = static_cast<size_t>(4 * ARRAY_SIZE + length) / (4 * ARRAY_SIZE);
+    const size_t maxThreads = static_cast<size_t>(4 * SORT_BUFFER_SIZE + length) / (4 * SORT_BUFFER_SIZE);
     const size_t hardwareThreads = thread::hardware_concurrency();
     numThreads = min(hardwareThreads != 0 ? hardwareThreads : 2, maxThreads);
   }
@@ -119,7 +122,7 @@ void Merge(vector<SortBufferData>& buffers, int& fileCounter)
        [](const auto& l, const auto& r)
        {return r->number < l->number; });//сортировка по убыванию
 
-  vector<uint32_t> outData(100000);
+  vector<uint32_t> outData(1000000);
   size_t outPos = 0;
   while (dataPointers.size() > 1)
   {
@@ -167,7 +170,7 @@ int SortParts()
   vector<SortBufferData> buffers(fileData.numThreads);
   //размер буфера определяется в зависимости от количества ядер на компьютере
   for (size_t i = 0; i < buffers.size(); ++i)
-    buffers[i].SetSize(ARRAY_SIZE / fileData.numThreads); 
+    buffers[i].SetSize(SORT_BUFFER_SIZE / fileData.numThreads);
 
   while (!fileData.inputFile.eof())
   {
@@ -269,7 +272,7 @@ void MergeParts(int fileCounter)
   vector<MergedFileData*> dataPointers(fileDatas.size());
   int fileNumber = 1;
 
-  const size_t outputBufferSize = ARRAY_SIZE / 2; // Размер буфера для записи выходного файла
+  const size_t outputBufferSize = MERGE_BUFFER_SIZE / 2; // Размер буфера для записи выходного файла
   const size_t inputBufferSize = outputBufferSize / fileCounter;
   for (size_t i = 0; i < fileDatas.size(); ++i)
   {
